@@ -44,11 +44,16 @@ jobs:
       - name: Build Debug & Release APKs
         run: ./gradlew assembleDebug assembleRelease --stacktrace
 
-      - name: Extract Tag Version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
