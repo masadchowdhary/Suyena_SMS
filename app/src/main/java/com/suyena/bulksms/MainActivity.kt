@@ -4,20 +4,25 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -138,18 +143,34 @@ fun BulkSmsScreen() {
         }
     }
 
-    // Permission request launcher
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (!isGranted) {
+    // Permissions to request
+    val permissionsToRequest = remember {
+        buildList {
+            add(Manifest.permission.SEND_SMS)
+            add(Manifest.permission.READ_PHONE_STATE)
+            add(Manifest.permission.READ_PHONE_NUMBERS)
+            add(Manifest.permission.READ_CONTACTS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val smsGranted = permissions[Manifest.permission.SEND_SMS] ?: false
+        if (!smsGranted) {
             Toast.makeText(context, "SEND_SMS permission is required to send bulk SMS", Toast.LENGTH_LONG).show()
         }
     }
 
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            permissionLauncher.launch(Manifest.permission.SEND_SMS)
+        val missingPermissions = permissionsToRequest.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missingPermissions.isNotEmpty()) {
+            permissionsLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 
@@ -176,7 +197,25 @@ fun BulkSmsScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Suyena Bulk SMS") },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.suyena_logo),
+                            contentDescription = "Suyena SMS Logo",
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                        Text(
+                            text = "Suyena SMS",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -336,7 +375,7 @@ fun BulkSmsScreen() {
                     enabled = !isSendingAll && activeSendingBatchIndex == -1 && numbersList.isNotEmpty() && messageText.isNotEmpty() && !exceedsPartsLimit,
                     onClick = {
                         if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                            permissionLauncher.launch(Manifest.permission.SEND_SMS)
+                            permissionsLauncher.launch(arrayOf(Manifest.permission.SEND_SMS))
                             return@Button
                         }
 
@@ -414,7 +453,7 @@ fun BulkSmsScreen() {
                                     enabled = !isSendingAll && activeSendingBatchIndex == -1 && messageText.isNotEmpty() && !exceedsPartsLimit,
                                     onClick = {
                                         if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                                            permissionLauncher.launch(Manifest.permission.SEND_SMS)
+                                            permissionsLauncher.launch(arrayOf(Manifest.permission.SEND_SMS))
                                             return@OutlinedButton
                                         }
 

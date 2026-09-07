@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Suyena Bulk SMS"
+rootProject.name = "Suyena SMS"
 include(":app")
