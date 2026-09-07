@@ -1,15 +1,20 @@
 package com.suyena.bulksms
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -148,7 +153,6 @@ fun BulkSmsScreen() {
         buildList {
             add(Manifest.permission.SEND_SMS)
             add(Manifest.permission.READ_PHONE_STATE)
-            add(Manifest.permission.READ_PHONE_NUMBERS)
             add(Manifest.permission.READ_CONTACTS)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
@@ -156,12 +160,31 @@ fun BulkSmsScreen() {
         }
     }
 
+    var hasSmsPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasSmsPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     val permissionsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val smsGranted = permissions[Manifest.permission.SEND_SMS] ?: false
-        if (!smsGranted) {
-            Toast.makeText(context, "SEND_SMS permission is required to send bulk SMS", Toast.LENGTH_LONG).show()
+    ) { _ ->
+        hasSmsPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        if (!hasSmsPermission) {
+            Toast.makeText(context, "SMS permission required. If blocked, tap 'Open App Settings'.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -230,6 +253,64 @@ fun BulkSmsScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Permission Blocked / Required Banner
+            if (!hasSmsPermission) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ SMS Permission Blocked or Required",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Android requires SMS permission to send messages. If the prompt was blocked or denied, you can allow it directly in App Settings.",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "💡 Android 13/14 Tip: If settings are grayed out, open App Info > tap the 3 dots (⋮) top-right > choose 'Allow restricted settings'.",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = {
+                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("Open App Settings")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    permissionsLauncher.launch(permissionsToRequest.toTypedArray())
+                                }
+                            ) {
+                                Text("Retry Prompt")
+                            }
+                        }
+                    }
+                }
+            }
             // 1. Phone Numbers Input / Import / Export
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -374,8 +455,13 @@ fun BulkSmsScreen() {
                 Button(
                     enabled = !isSendingAll && activeSendingBatchIndex == -1 && numbersList.isNotEmpty() && messageText.isNotEmpty() && !exceedsPartsLimit,
                     onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                            permissionsLauncher.launch(arrayOf(Manifest.permission.SEND_SMS))
+                        if (!hasSmsPermission) {
+                            Toast.makeText(context, "SMS permission is required. Please allow it in App Settings.", Toast.LENGTH_LONG).show()
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
                             return@Button
                         }
 
@@ -452,8 +538,13 @@ fun BulkSmsScreen() {
                                 OutlinedButton(
                                     enabled = !isSendingAll && activeSendingBatchIndex == -1 && messageText.isNotEmpty() && !exceedsPartsLimit,
                                     onClick = {
-                                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                                            permissionsLauncher.launch(arrayOf(Manifest.permission.SEND_SMS))
+                                        if (!hasSmsPermission) {
+                                            Toast.makeText(context, "SMS permission is required. Please allow it in App Settings.", Toast.LENGTH_LONG).show()
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", context.packageName, null)
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
                                             return@OutlinedButton
                                         }
 

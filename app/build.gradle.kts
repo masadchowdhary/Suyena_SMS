@@ -22,10 +22,16 @@ android {
 
     splits {
         abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true
+            isEnable = false
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            if (buildType.name == "release") {
+                output?.outputFileName = "Suyena-SMS-Universal.apk"
+            }
         }
     }
 
