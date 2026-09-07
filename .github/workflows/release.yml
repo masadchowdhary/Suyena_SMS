@@ -35,7 +35,7 @@ jobs:
           if [ -f "./gradlew" ]; then
             chmod +x gradlew
           else
-            gradle wrapper
+            gradle wrapper --gradle-version 8.13
             chmod +x gradlew
           fi
 
